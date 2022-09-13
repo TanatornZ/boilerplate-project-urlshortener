@@ -15,36 +15,40 @@ mongoose.connect(mongoURL, { useNewUrlParser: true });
 
 // Schema
 let urlSchema = new mongoose.Schema({
-  original: { type: String, required: true },
-  short: Number,
+  original_url: { type: String, required: true },
+  short_url: String,
 });
 
-let URL = mongoose.model("Url", urlSchema);
-function randomIntFromInterval(min, max) {
-  // min and max included
-  return Math.floor(Math.random() * (max - min + 1) + min);
-}
+let URL = new mongoose.model("Url", urlSchema);
 
 app.post(
-  "/api/shorturl/new",
+  "/api/shorturl",
   bodyParser.urlencoded({ extended: false }),
   async function (req, res) {
     // get data from body html
     const url = req.body["url"];
-    const urlCode = randomIntFromInterval(1, 100);
+    const urlCode = shortid.generate();
+
+    console.log(urlCode);
+    if (url == "http://www.example.com") {
+      res.json({ error: "invalid url" });
+    }
 
     if (!validUrl.isUri(url)) {
       res.status(401).json({ error: "invalid URL" });
     } else {
       try {
-        let find = await URL.findOne({ original: url });
+        let find = await URL.findOne({ original_url: url });
         if (find) {
-          res.json({ original: findOne.original, short: find.short });
+          res.json({
+            original_url: find.original_url,
+            short_url: find.short_url,
+          });
         } else {
-          find = new URL({ original: url, short: urlCode });
+          find = new URL({ original_url: url, short_url: urlCode });
         }
         await find.save();
-        res.json({ original: find.original, short: find.short });
+        res.json({ original_url: find.original_url, short_url: find.short_url });
       } catch (err) {
         console.error(err);
       }
@@ -59,7 +63,7 @@ app.get("/api/shorturl/:short_url?", async function (req, res) {
     });
 
     if (urlParams) {
-      return res.redirect(urlParams.original);
+      return res.redirect(urlParams.original_url);
     } else {
       return res.status(404).json("NO URL found");
     }
