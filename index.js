@@ -2,79 +2,23 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const app = express();
-var bodyParser = require("body-parser");
-var validUrl = require("valid-url");
 const mongoose = require("mongoose");
-const shortid = require("shortid");
-
+const bodyParser = require("body-parser");
+const dns = require("dns");
+const urlparser = require("url");
 const mongoURL =
   "mongodb+srv://bank2545:bank2545@shorturl.jc5hdtn.mongodb.net/?retryWrites=true&w=majority";
 
 // database connection
 mongoose.connect(mongoURL, { useNewUrlParser: true });
-
-// Schema
-let urlSchema = new mongoose.Schema({
-  original_url: { type: String, required: true },
-  short_url: String,
-});
-
-let URL = new mongoose.model("Url", urlSchema);
-
-app.post(
-  "/api/shorturl",
-  bodyParser.urlencoded({ extended: false }),
-  async function (req, res) {
-    // get data from body html
-    const url = req.body["url"];
-    const urlCode = shortid.generate();
-
-    console.log(urlCode);
-    if (url == "http://www.example.com") {
-      res.json({ error: "invalid url" });
-    }
-
-    if (!validUrl.isUri(url)) {
-      res.status(401).json({ error: "invalid URL" });
-    } else {
-      try {
-        let find = await URL.findOne({ original_url: url });
-        if (find) {
-          res.json({
-            original_url: find.original_url,
-            short_url: find.short_url,
-          });
-        } else {
-          find = new URL({ original_url: url, short_url: urlCode });
-        }
-        await find.save();
-        res.json({ original_url: find.original_url, short_url: find.short_url });
-      } catch (err) {
-        console.error(err);
-      }
-    }
-  }
-);
-
-app.get("/api/shorturl/:short_url?", async function (req, res) {
-  try {
-    const urlParams = await URL.findOne({
-      short: req.params.short_url,
-    });
-
-    if (urlParams) {
-      return res.redirect(urlParams.original_url);
-    } else {
-      return res.status(404).json("NO URL found");
-    }
-  } catch (err) {
-    console.error(err);
-  }
-});
+console.log("mongoose connection", mongoose.connection.readyState);
+let schema = new mongoose.Schema({ url: String });
+const Url = mongoose.model("Url", schema);
 
 // Basic Configuration
 const port = process.env.PORT || 3000;
 
+app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cors());
 
 app.use("/public", express.static(`${process.cwd()}/public`));
@@ -86,6 +30,47 @@ app.get("/", function (req, res) {
 // Your first API endpoint
 app.get("/api/hello", function (req, res) {
   res.json({ greeting: "hello API" });
+});
+
+app.post("/api/shorturl", (req, res) => {
+  console.log(req.body.url);
+  // get url from body html
+  const bodyUrl = req.body.url;
+
+  // check address of bodyUrl
+  const someThing = dns.lookup(
+    urlparser.parse(bodyUrl).hostname,
+    (error, address) => {
+      
+      if (!address) {
+        res.json({ error: "invalid url" });
+      } else {
+        // create row have url field with bodyUrl
+        const url = new Url({ url: bodyUrl });
+        // save and response
+        url.save((err, data) => {
+          res.json({ original_url: data.url, short_url: data.id });
+        });
+      }
+      console.log("error", error);
+      console.log("address", address);
+    }
+  );
+
+  console.log("something", someThing);
+});
+
+app.get("/api/shorturl/:id", (req, res) => {
+  const id = req.params.id;
+
+  // get row from id
+  Url.findById(id, (err, data) => {
+    if (!data) {
+      res.json({ error: "invalid url" });
+    } else {
+      res.redirect(data.url);
+    }
+  });
 });
 
 app.listen(port, function () {
